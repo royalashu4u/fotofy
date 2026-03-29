@@ -9,13 +9,14 @@ import httpx
 from typing import Optional
 
 from bot.config import (
+    POLLINATIONS_API_KEY,
     POLLINATIONS_MODEL,
     POLLINATIONS_WIDTH,
     POLLINATIONS_HEIGHT,
     STYLE_PRESETS,
 )
 
-BASE_URL = "https://image.pollinations.ai/prompt"
+BASE_URL = "https://gen.pollinations.ai/image"
 
 
 def build_prompt(
@@ -75,6 +76,8 @@ def generate_image_url(
         f"&enhance=true"
         f"&safe=true"
     )
+    if POLLINATIONS_API_KEY:
+        url += f"&key={POLLINATIONS_API_KEY}"
     return url
 
 
@@ -87,15 +90,25 @@ async def generate_image(
     """
     Generate an image and return (image_bytes, image_url).
     Makes a real HTTP GET to Pollinations.ai which returns the image binary.
-    Timeout: 55 seconds (within Vercel's 60s function limit).
+    Timeout: 120 seconds (60s recommended for Vercel Pro).
     """
     full_prompt = build_prompt(prompt, style_name, selfie_description)
     url = generate_image_url(full_prompt, model=model)
 
-    async with httpx.AsyncClient(timeout=55.0, follow_redirects=True) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        return response.content, url
+    headers = {}
+    if POLLINATIONS_API_KEY:
+        headers["Authorization"] = f"Bearer {POLLINATIONS_API_KEY}"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.content, url
+    except httpx.TimeoutException:
+        raise Exception(
+            "Image generation timed out. This can happen on free hosting plans "
+            "with low timeout limits. Try again or use a host with higher timeout."
+        )
 
 
 async def generate_image_with_reference(
@@ -128,8 +141,14 @@ async def generate_image_with_reference(
         f"&enhance=true"
         f"&image={image_param}"
     )
+    if POLLINATIONS_API_KEY:
+        url += f"&key={POLLINATIONS_API_KEY}"
 
-    async with httpx.AsyncClient(timeout=55.0, follow_redirects=True) as client:
-        response = await client.get(url)
+    headers = {}
+    if POLLINATIONS_API_KEY:
+        headers["Authorization"] = f"Bearer {POLLINATIONS_API_KEY}"
+
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        response = await client.get(url, headers=headers)
         response.raise_for_status()
         return response.content, url

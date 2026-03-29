@@ -12,10 +12,13 @@ WEBHOOK_SECRET: str = os.environ.get("WEBHOOK_SECRET", "fotofyai_secret")
 # ── Firebase ──────────────────────────────────────────────────
 FIREBASE_PROJECT_ID: str = os.environ.get("FIREBASE_PROJECT_ID", "")
 FIREBASE_STORAGE_BUCKET: str = os.environ.get("FIREBASE_STORAGE_BUCKET", "")
-FIREBASE_CREDENTIALS_PATH: str = os.environ.get("FIREBASE_CREDENTIALS_PATH", "firebase-credentials.json")
+FIREBASE_CREDENTIALS_PATH: str = os.environ.get(
+    "FIREBASE_CREDENTIALS_PATH", "firebase-credentials.json"
+)
 FIREBASE_CREDENTIALS_JSON: str = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")
 
 # ── Pollinations.ai ───────────────────────────────────────────
+POLLINATIONS_API_KEY: str = os.environ.get("POLLINATIONS_API_KEY", "")
 POLLINATIONS_MODEL: str = os.environ.get("POLLINATIONS_MODEL", "flux")
 POLLINATIONS_WIDTH: int = int(os.environ.get("POLLINATIONS_WIDTH", "1024"))
 POLLINATIONS_HEIGHT: int = int(os.environ.get("POLLINATIONS_HEIGHT", "1024"))
@@ -75,7 +78,25 @@ STYLE_PRESETS = {
 
 # ── Upgrade Packages ──────────────────────────────────────────
 PACKAGES = [
-    {"id": "starter", "name": "⚡ Starter Pack",   "credits": 50,  "stars": 99,  "label": "50 Credits — ⭐ 99 Stars"},
-    {"id": "pro",     "name": "🚀 Pro Pack",        "credits": 200, "stars": 299, "label": "200 Credits — ⭐ 299 Stars"},
-    {"id": "monthly", "name": "♾️ Unlimited Month", "credits": 999, "stars": 499, "label": "Unlimited 30 days — ⭐ 499 Stars"},
+    {
+        "id": "starter",
+        "name": "⚡ Starter Pack",
+        "credits": 50,
+        "stars": 99,
+        "label": "50 Credits — ⭐ 99 Stars",
+    },
+    {
+        "id": "pro",
+        "name": "🚀 Pro Pack",
+        "credits": 200,
+        "stars": 299,
+        "label": "200 Credits — ⭐ 299 Stars",
+    },
+    {
+        "id": "monthly",
+        "name": "♾️ Unlimited Month",
+        "credits": 999,
+        "stars": 499,
+        "label": "Unlimited 30 days — ⭐ 499 Stars",
+    },
 ]
