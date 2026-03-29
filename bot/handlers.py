@@ -30,16 +30,17 @@ from bot.services.pollinations import generate_image, generate_image_with_refere
 logger = logging.getLogger(__name__)
 
 # ── FSM States ────────────────────────────────────────────────
-STATE_IDLE            = "IDLE"
+STATE_IDLE = "IDLE"
 STATE_AWAITING_SELFIE = "AWAITING_SELFIE"
-STATE_CHOOSING_STYLE  = "CHOOSING_STYLE"
-STATE_CUSTOM_PROMPT   = "CUSTOM_PROMPT"
-STATE_GENERATING      = "GENERATING"
+STATE_CHOOSING_STYLE = "CHOOSING_STYLE"
+STATE_CUSTOM_PROMPT = "CUSTOM_PROMPT"
+STATE_GENERATING = "GENERATING"
 
 
 # ══════════════════════════════════════════════════════════════
 # /start  — Onboarding
 # ══════════════════════════════════════════════════════════════
+
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -48,7 +49,10 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Register or fetch user
     profile = db.get_or_create_user(tg_id, user.first_name, user.username)
     credits = profile.get("credits", 0)
-    is_new = profile.get("total_generated", 0) == 0 and credits == config.FREE_CREDITS_ON_SIGNUP
+    is_new = (
+        profile.get("total_generated", 0) == 0
+        and credits == config.FREE_CREDITS_ON_SIGNUP
+    )
 
     db.set_state(tg_id, STATE_IDLE)
 
@@ -74,12 +78,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # /generate — Trigger generation flow
 # ══════════════════════════════════════════════════════════════
 
+
 async def cmd_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await _start_generation_flow(update, ctx, user.id)
 
 
-async def _start_generation_flow(update: Update, ctx: ContextTypes.DEFAULT_TYPE, tg_id: int):
+async def _start_generation_flow(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, tg_id: int
+):
     """Common entry point for starting a generation."""
     profile = db.get_or_create_user(
         tg_id,
@@ -152,6 +159,7 @@ async def _start_generation_flow(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
 # Photo Handler — selfie upload
 # ══════════════════════════════════════════════════════════════
 
+
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
     state = db.get_state(tg_id)
@@ -179,10 +187,14 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         # Save selfie info
         db.save_selfie_info(tg_id, file_id, selfie_url)
-        db.set_state(tg_id, STATE_CHOOSING_STYLE, {
-            "selfie_file_id": file_id,
-            "selfie_url": selfie_url,
-        })
+        db.set_state(
+            tg_id,
+            STATE_CHOOSING_STYLE,
+            {
+                "selfie_file_id": file_id,
+                "selfie_url": selfie_url,
+            },
+        )
 
         profile = db.get_user(tg_id)
         credits = profile.get("credits", 0)
@@ -205,18 +217,24 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 def _upload_selfie_to_storage(tg_id: int, image_bytes: bytes) -> str:
-    """Upload selfie to Firebase Storage and return public URL."""
-    from bot.services.firebase import get_bucket
-    bucket = get_bucket()
-    blob = bucket.blob(f"selfies/{tg_id}/selfie.jpg")
-    blob.upload_from_string(image_bytes, content_type="image/jpeg")
-    blob.make_public()
-    return blob.public_url
+    """Upload selfie to local storage and return base64 data URL."""
+    import base64
+    import os
+
+    os.makedirs("/tmp/selfies", exist_ok=True)
+    file_path = f"/tmp/selfies/{tg_id}.jpg"
+
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
+
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}"
 
 
 # ══════════════════════════════════════════════════════════════
 # Text Handler — custom prompts
 # ══════════════════════════════════════════════════════════════
+
 
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
@@ -233,7 +251,9 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         # Start generating
         await _do_generation(
-            update, ctx, tg_id,
+            update,
+            ctx,
+            tg_id,
             user_prompt=text,
             style_name="Custom",
             selfie_url=selfie_url,
@@ -257,6 +277,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # Callback Query Handler — all button presses
 # ══════════════════════════════════════════════════════════════
 
+
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -266,7 +287,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── Style Selection ───────────────────────────────────────
     if data.startswith("style:"):
-        style = data[len("style:"):]
+        style = data[len("style:") :]
         state_data = db.get_state_data(tg_id)
         selfie_url = state_data.get("selfie_url")
 
@@ -282,7 +303,9 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             # Preset selected — start generation
             await _do_generation(
-                update, ctx, tg_id,
+                update,
+                ctx,
+                tg_id,
                 user_prompt=f"portrait of a person in {style} style",
                 style_name=style,
                 selfie_url=selfie_url,
@@ -291,9 +314,13 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── Action Buttons ────────────────────────────────────────
     elif data.startswith("action:"):
-        action = data[len("action:"):]
+        action = data[len("action:") :]
 
-        if action == "generate" or action == "generate_again" or action == "back_to_generate":
+        if (
+            action == "generate"
+            or action == "generate_again"
+            or action == "back_to_generate"
+        ):
             await _start_generation_flow(update, ctx, tg_id)
 
         elif action == "credits":
@@ -319,10 +346,20 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⭐ Get More Credits", callback_data="action:upgrade")],
-                    [InlineKeyboardButton("🎨 Generate", callback_data="action:generate")],
-                ]),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "⭐ Get More Credits", callback_data="action:upgrade"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🎨 Generate", callback_data="action:generate"
+                            )
+                        ],
+                    ]
+                ),
             )
 
         elif action == "gallery":
@@ -331,22 +368,34 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text(
                     "🖼️ *Your Gallery*\n\nNo images generated yet! Let's make some art 🎨",
                     parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🎨 Generate Now", callback_data="action:generate")]
-                    ]),
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🎨 Generate Now", callback_data="action:generate"
+                                )
+                            ]
+                        ]
+                    ),
                 )
             else:
                 await query.edit_message_text(
                     f"🖼️ *Your Gallery* — last {len(generations)} images\n\n"
                     + "\n".join(
-                        f"{i+1}. {g.get('style','Custom')} — [View]({g.get('image_url','')})"
+                        f"{i + 1}. {g.get('style', 'Custom')} — [View]({g.get('image_url', '')})"
                         for i, g in enumerate(generations)
                     ),
                     parse_mode=ParseMode.MARKDOWN,
                     disable_web_page_preview=False,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🎨 Generate Again", callback_data="action:generate")]
-                    ]),
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🎨 Generate Again", callback_data="action:generate"
+                                )
+                            ]
+                        ]
+                    ),
                 )
 
         elif action == "upgrade":
@@ -389,7 +438,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── Buy Package ───────────────────────────────────────────
     elif data.startswith("buy:"):
-        pkg_id = data[len("buy:"):]
+        pkg_id = data[len("buy:") :]
         pkg = next((p for p in PACKAGES if p["id"] == pkg_id), None)
         if not pkg:
             await query.answer("Invalid package", show_alert=True)
@@ -405,13 +454,14 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("confirm_buy:"):
-        pkg_id = data[len("confirm_buy:"):]
+        pkg_id = data[len("confirm_buy:") :]
         await _send_stars_invoice(update, ctx, tg_id, pkg_id)
 
 
 # ══════════════════════════════════════════════════════════════
 # Core Generation Logic
 # ══════════════════════════════════════════════════════════════
+
 
 async def _do_generation(
     update: Update,
@@ -506,9 +556,15 @@ async def _do_generation(
                 f"⚠️ *Running low!* You have only *{credits_left} credits* left.\n"
                 f"Upgrade now to keep creating!",
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⭐ Upgrade", callback_data="action:upgrade")]
-                ]),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "⭐ Upgrade", callback_data="action:upgrade"
+                            )
+                        ]
+                    ]
+                ),
             )
 
     except httpx.TimeoutException:
@@ -537,6 +593,7 @@ async def _do_generation(
 # Telegram Stars Payment
 # ══════════════════════════════════════════════════════════════
 
+
 async def _send_stars_invoice(
     update: Update, ctx: ContextTypes.DEFAULT_TYPE, tg_id: int, pkg_id: str
 ):
@@ -547,7 +604,9 @@ async def _send_stars_invoice(
     query = update.callback_query
     chat_id = query.message.chat_id if query else tg_id
 
-    credits_text = f"{pkg['credits']} Credits" if pkg['credits'] < 999 else "Unlimited (30 days)"
+    credits_text = (
+        f"{pkg['credits']} Credits" if pkg["credits"] < 999 else "Unlimited (30 days)"
+    )
 
     await ctx.bot.send_invoice(
         chat_id=chat_id,
@@ -579,7 +638,11 @@ async def handle_successful_payment(update: Update, ctx: ContextTypes.DEFAULT_TY
 
         if pkg:
             db.apply_purchase(tg_id, pkg_id, pkg["credits"])
-            credits_text = f"{pkg['credits']} credits" if pkg["credits"] < 999 else "unlimited access for 30 days"
+            credits_text = (
+                f"{pkg['credits']} credits"
+                if pkg["credits"] < 999
+                else "unlimited access for 30 days"
+            )
 
             await update.message.reply_text(
                 f"🎉 *Payment successful!*\n\n"
@@ -599,9 +662,12 @@ async def handle_successful_payment(update: Update, ctx: ContextTypes.DEFAULT_TY
 # Other Commands
 # ══════════════════════════════════════════════════════════════
 
+
 async def cmd_credits(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
-    profile = db.get_or_create_user(tg_id, update.effective_user.first_name, update.effective_user.username)
+    profile = db.get_or_create_user(
+        tg_id, update.effective_user.first_name, update.effective_user.username
+    )
     credits = profile.get("credits", 0)
     is_premium = profile.get("is_premium", False)
     total = profile.get("total_generated", 0)
@@ -612,10 +678,20 @@ async def cmd_credits(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🖼️ Total images generated: *{total}*\n\n"
         f"{'Get more credits below!' if not is_premium else 'Enjoy unlimited generation!'}",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Get More Credits", callback_data="action:upgrade")],
-            [InlineKeyboardButton("🎨 Generate Now", callback_data="action:generate")],
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "⭐ Get More Credits", callback_data="action:upgrade"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎨 Generate Now", callback_data="action:generate"
+                    )
+                ],
+            ]
+        ),
     )
 
 
@@ -658,7 +734,7 @@ async def cmd_gallery(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🖼️ *Your Gallery* (last {len(generations)} images)\n\n"
         + "\n".join(
-            f"{i+1}. {g.get('style','Custom')} — [View Image]({g.get('image_url','')})"
+            f"{i + 1}. {g.get('style', 'Custom')} — [View Image]({g.get('image_url', '')})"
             for i, g in enumerate(generations)
         ),
         parse_mode=ParseMode.MARKDOWN,
@@ -695,6 +771,7 @@ async def cmd_paysupport(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ══════════════════════════════════════════════════════════════
 # Helper
 # ══════════════════════════════════════════════════════════════
+
 
 async def _send_or_edit(update: Update, text: str, **kwargs):
     """Edit message if from callback, send new message otherwise."""

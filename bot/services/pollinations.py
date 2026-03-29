@@ -106,12 +106,17 @@ async def generate_image_with_reference(
 ) -> tuple[bytes, str]:
     """
     Image-to-image generation using the selfie as reference.
-    Uses Pollinations.ai image parameter for guided generation.
+    Supports both URLs and base64 data URLs.
     """
     full_prompt = build_prompt(prompt, style_name)
     seed = random.randint(1, 2_000_000)
     encoded_prompt = urllib.parse.quote(full_prompt)
-    encoded_ref = urllib.parse.quote(reference_image_url)
+
+    if reference_image_url.startswith("data:image"):
+        b64_data = reference_image_url.split(",", 1)[1]
+        image_param = f"data:image/jpeg;base64,{urllib.parse.quote(b64_data)}"
+    else:
+        image_param = urllib.parse.quote(reference_image_url)
 
     url = (
         f"{BASE_URL}/{encoded_prompt}"
@@ -121,7 +126,7 @@ async def generate_image_with_reference(
         f"&seed={seed}"
         f"&nologo=true"
         f"&enhance=true"
-        f"&image={encoded_ref}"
+        f"&image={image_param}"
     )
 
     async with httpx.AsyncClient(timeout=55.0, follow_redirects=True) as client:

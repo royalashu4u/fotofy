@@ -42,7 +42,8 @@ def _init_firebase():
             "or provide firebase-credentials.json file."
         )
 
-    firebase_admin.initialize_app(cred, {"storageBucket": FIREBASE_STORAGE_BUCKET})
+    storage_bucket = FIREBASE_STORAGE_BUCKET or None
+    firebase_admin.initialize_app(cred, {"storageBucket": storage_bucket})
     _initialized = True
 
 
@@ -58,6 +59,7 @@ def get_bucket():
 
 # ── User Operations ───────────────────────────────────────────
 
+
 def get_user(telegram_id: int) -> Optional[Dict[str, Any]]:
     """Return user document or None if not found."""
     db = get_db()
@@ -65,7 +67,9 @@ def get_user(telegram_id: int) -> Optional[Dict[str, Any]]:
     return doc.to_dict() if doc.exists else None
 
 
-def create_user(telegram_id: int, first_name: str, username: Optional[str]) -> Dict[str, Any]:
+def create_user(
+    telegram_id: int, first_name: str, username: Optional[str]
+) -> Dict[str, Any]:
     """Create a new user with 20 free credits."""
     db = get_db()
     now = datetime.now(timezone.utc)
@@ -89,7 +93,9 @@ def create_user(telegram_id: int, first_name: str, username: Optional[str]) -> D
     return data
 
 
-def get_or_create_user(telegram_id: int, first_name: str, username: Optional[str]) -> Dict[str, Any]:
+def get_or_create_user(
+    telegram_id: int, first_name: str, username: Optional[str]
+) -> Dict[str, Any]:
     user = get_user(telegram_id)
     if user is None:
         user = create_user(telegram_id, first_name, username)
@@ -103,6 +109,7 @@ def update_user(telegram_id: int, data: Dict[str, Any]):
 
 
 # ── State Management (FSM) ────────────────────────────────────
+
 
 def get_state(telegram_id: int) -> str:
     user = get_user(telegram_id)
@@ -123,6 +130,7 @@ def get_state_data(telegram_id: int) -> Dict[str, Any]:
 
 
 # ── Credit Operations ─────────────────────────────────────────
+
 
 def deduct_credit(telegram_id: int) -> bool:
     """
@@ -154,10 +162,13 @@ def deduct_credit(telegram_id: int) -> bool:
         if credits <= 0:
             return False
 
-        transaction.update(ref, {
-            "credits": firestore.Increment(-1),
-            "total_generated": firestore.Increment(1),
-        })
+        transaction.update(
+            ref,
+            {
+                "credits": firestore.Increment(-1),
+                "total_generated": firestore.Increment(1),
+            },
+        )
         return True
 
     txn = db.transaction()
@@ -204,10 +215,12 @@ def check_and_refill_credits(telegram_id: int) -> bool:
 
     if delta >= timedelta(days=REFILL_DAYS):
         db = get_db()
-        db.collection("users").document(str(telegram_id)).update({
-            "credits": REFILL_CREDITS,
-            "last_gift_at": now,
-        })
+        db.collection("users").document(str(telegram_id)).update(
+            {
+                "credits": REFILL_CREDITS,
+                "last_gift_at": now,
+            }
+        )
         _log_transaction(db, telegram_id, +REFILL_CREDITS, "3day_refill_gift")
         return True
 
@@ -237,6 +250,7 @@ def time_until_refill(telegram_id: int) -> timedelta:
 
 # ── Premium / Purchases ───────────────────────────────────────
 
+
 def apply_purchase(telegram_id: int, package_id: str, credits: int):
     """Apply a purchase — add credits or set premium."""
     db = get_db()
@@ -244,41 +258,54 @@ def apply_purchase(telegram_id: int, package_id: str, credits: int):
 
     if package_id == "monthly":
         expires = now + timedelta(days=30)
-        db.collection("users").document(str(telegram_id)).update({
-            "is_premium": True,
-            "premium_expires_at": expires,
-            "credits": firestore.Increment(credits),
-            "last_gift_at": now,
-        })
-        _log_transaction(db, telegram_id, +credits, f"purchase_{package_id}_subscription")
+        db.collection("users").document(str(telegram_id)).update(
+            {
+                "is_premium": True,
+                "premium_expires_at": expires,
+                "credits": firestore.Increment(credits),
+                "last_gift_at": now,
+            }
+        )
+        _log_transaction(
+            db, telegram_id, +credits, f"purchase_{package_id}_subscription"
+        )
     else:
-        db.collection("users").document(str(telegram_id)).update({
-            "credits": firestore.Increment(credits),
-        })
+        db.collection("users").document(str(telegram_id)).update(
+            {
+                "credits": firestore.Increment(credits),
+            }
+        )
         _log_transaction(db, telegram_id, +credits, f"purchase_{package_id}")
 
 
 # ── Selfie Storage ────────────────────────────────────────────
 
+
 def save_selfie_info(telegram_id: int, file_id: str, selfie_url: str):
     """Save the user's selfie file_id and public URL."""
-    update_user(telegram_id, {
-        "selfie_file_id": file_id,
-        "selfie_url": selfie_url,
-    })
+    update_user(
+        telegram_id,
+        {
+            "selfie_file_id": file_id,
+            "selfie_url": selfie_url,
+        },
+    )
 
 
 # ── Generation History ────────────────────────────────────────
 
+
 def save_generation(telegram_id: int, prompt: str, style: str, image_url: str):
     db = get_db()
-    db.collection("generations").add({
-        "user_id": str(telegram_id),
-        "prompt": prompt,
-        "style": style,
-        "image_url": image_url,
-        "created_at": datetime.now(timezone.utc),
-    })
+    db.collection("generations").add(
+        {
+            "user_id": str(telegram_id),
+            "prompt": prompt,
+            "style": style,
+            "image_url": image_url,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
 
 
 def get_recent_generations(telegram_id: int, limit: int = 5):
@@ -295,10 +322,13 @@ def get_recent_generations(telegram_id: int, limit: int = 5):
 
 # ── Internal Helpers ──────────────────────────────────────────
 
+
 def _log_transaction(db, telegram_id: int, delta: int, reason: str):
-    db.collection("credit_transactions").add({
-        "user_id": str(telegram_id),
-        "delta": delta,
-        "reason": reason,
-        "created_at": datetime.now(timezone.utc),
-    })
+    db.collection("credit_transactions").add(
+        {
+            "user_id": str(telegram_id),
+            "delta": delta,
+            "reason": reason,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
