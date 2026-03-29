@@ -1,0 +1,1 @@
+# Fotofy AI — API package
